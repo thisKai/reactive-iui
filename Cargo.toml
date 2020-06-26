@@ -5,3 +5,4 @@ authors = ["Kai <thiskaiguy@gmail.com>"]
 edition = "2018"
 
 [dependencies]
+iui = "0.3.0"
