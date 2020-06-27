@@ -82,6 +82,37 @@ impl PartialEq for dyn BaseVirtualControl {
     }
 }
 
+pub struct Handler<V: VirtualControl, SelfTy> {
+    handler: fn(&mut SelfTy),
+    child: V,
+}
+impl<V: VirtualControl, SelfTy> PartialEq for Handler<V, SelfTy> {
+    fn eq(&self, other: &Self) -> bool {
+        self.child == other.child
+    }
+}
+impl<V: VirtualControl, SelfTy: PartialEq + 'static> VirtualControl for Handler<V, SelfTy> {
+    type Control = V::Control;
+
+    type UpdateCtx = V::UpdateCtx;
+
+    const TYPE_NAME: &'static str = "Handler";
+
+    fn create(&self, ctx: &UI) -> (Self::Control, Self::UpdateCtx) {
+        self.child.create(ctx)
+    }
+
+    fn update(
+        &self,
+        previous: Self,
+        control: &mut Self::Control,
+        update_ctx: Self::UpdateCtx,
+        ctx: &UI,
+    ) -> Self::UpdateCtx {
+        self.child.update(previous.child, control, update_ctx, ctx)
+    }
+}
+
 #[derive(PartialEq)]
 pub struct Button {
     pub text: String,
