@@ -1,4 +1,4 @@
-use stream_ui::*;
+use reactive_iui::*;
 
 struct Main {
     is_true: bool,

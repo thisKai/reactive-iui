@@ -1,5 +1,5 @@
 [package]
-name = "stream-ui"
+name = "reactive-iui"
 version = "0.1.0"
 authors = ["Kai <thiskaiguy@gmail.com>"]
 edition = "2018"
