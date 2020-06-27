@@ -3,6 +3,35 @@ use {
     std::any::Any,
 };
 
+pub struct App {
+    ctx: UI,
+    window: controls::Window,
+    build: Box<dyn Fn() -> Box<dyn BaseVirtualControl>>,
+}
+impl App {
+    pub fn new<V: VirtualControl, F>(build: F) -> Self
+    where
+        F: Fn() -> V + 'static,
+    {
+        let ctx = UI::init().expect("Couldn't initialize UI library");
+
+        let window =
+            controls::Window::new(&ctx, "Test App", 200, 200, controls::WindowType::NoMenubar);
+
+        Self {
+            ctx,
+            window,
+            build: Box::new(move || Box::new(build())),
+        }
+    }
+
+    pub fn run(&mut self) {
+        self.window.set_child(&self.ctx, (self.build)().control(&self.ctx));
+        self.window.show(&self.ctx);
+        self.ctx.main();
+    }
+}
+
 pub trait VirtualControl: Any + PartialEq {
     type Control: Into<controls::Control>;
 
@@ -10,7 +39,10 @@ pub trait VirtualControl: Any + PartialEq {
 
     const TYPE_NAME: &'static str;
 
-    fn boxed(self) -> Box<dyn BaseVirtualControl> where Self: Sized {
+    fn boxed(self) -> Box<dyn BaseVirtualControl>
+    where
+        Self: Sized,
+    {
         Box::new(self)
     }
 
