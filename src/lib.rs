@@ -2,6 +2,7 @@ use {
     iui::{controls, UI},
     std::any::Any,
 };
+pub use codegen::view;
 
 pub struct App {
     ctx: UI,
