@@ -1,12 +1,21 @@
 mod button;
+mod component;
 mod group;
 
-pub use {button::Button, group::Group};
 use {
+    as_any::Downcast,
     fragile::Fragile,
     iui::{controls, UI},
     legion::prelude::*,
-    std::{any::Any, sync::mpsc::Sender},
+    std::{
+        any::Any,
+        sync::mpsc::{Receiver, Sender},
+    },
+};
+pub use {
+    button::Button,
+    component::{Component, ComponentState, ComponentWidget},
+    group::Group,
 };
 
 pub trait PrimitiveWidget: Any + PartialEq {
@@ -23,18 +32,21 @@ pub trait PrimitiveWidget: Any + PartialEq {
 
     fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity;
 
-    fn create_control<'a, 'b>(
+    fn create_typed_control<'a, 'b>(
         &'a self,
         ctx: &UI,
         world: &'b mut World,
         event_sender: EventSender,
-    ) -> Self::Control {
+    ) -> (Entity, Self::Control) {
         let entity = self.create_entity(ctx, world, event_sender);
-        world
-            .get_component::<Fragile<Self::Control>>(entity)
-            .unwrap()
-            .get()
-            .clone()
+        (
+            entity,
+            world
+                .get_component::<Fragile<Self::Control>>(entity)
+                .unwrap()
+                .get()
+                .clone(),
+        )
     }
 }
 pub trait BoxedPrimitiveWidget {
@@ -46,7 +58,7 @@ pub trait BoxedPrimitiveWidget {
         ctx: &UI,
         world: &mut World,
         event_sender: EventSender,
-    ) -> controls::Control;
+    ) -> (Entity, controls::Control);
 }
 impl<T: PrimitiveWidget> BoxedPrimitiveWidget for T {
     fn as_any(&self) -> &dyn Any {
@@ -63,8 +75,9 @@ impl<T: PrimitiveWidget> BoxedPrimitiveWidget for T {
         ctx: &UI,
         world: &mut World,
         event_sender: EventSender,
-    ) -> controls::Control {
-        PrimitiveWidget::create_control(self, ctx, world, event_sender).into()
+    ) -> (Entity, controls::Control) {
+        let (entity, control) = self.create_typed_control(ctx, world, event_sender);
+        (entity, control.into())
     }
 }
 impl PartialEq for dyn BoxedPrimitiveWidget {
@@ -82,15 +95,16 @@ impl Event {
             handler: Box::new(TypedEvent { handler }),
         }
     }
-    pub fn handle(&self, component: &mut dyn Any) {
+    pub fn handle(&self, component: &mut dyn Component) {
         self.handler.handle(component)
     }
 }
 
-type EventSender = Sender<Event>;
+pub type EventSender = Sender<Event>;
+pub type EventReceiver = Receiver<Event>;
 
 pub trait HandleEvent {
-    fn handle(&self, component: &mut dyn Any);
+    fn handle(&self, component: &mut dyn Component);
 }
 pub struct TypedEvent<SelfTy: 'static> {
     pub handler: fn(&mut SelfTy),
@@ -101,7 +115,7 @@ impl<SelfTy: Any> TypedEvent<SelfTy> {
     }
 }
 impl<SelfTy: Any> HandleEvent for TypedEvent<SelfTy> {
-    fn handle(&self, component: &mut dyn Any) {
+    fn handle(&self, component: &mut dyn Component) {
         self.handle_typed(component.downcast_mut().unwrap())
     }
 }

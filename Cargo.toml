@@ -14,3 +14,4 @@ codegen = { path = "codegen", package = "reactive-iui-codegen" }
 iui = "0.3"
 legion = "0.2"
 fragile = "1.0"
+as-any = "0.2"

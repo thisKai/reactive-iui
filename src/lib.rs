@@ -2,17 +2,18 @@ pub mod widgets;
 
 pub use {
     codegen::view,
-    widgets::{BoxedPrimitiveWidget, PrimitiveWidget, Button, Group, SingleChildParent},
+    widgets::{
+        BoxedPrimitiveWidget, Button, Component, ComponentWidget, Group, PrimitiveWidget,
+        SingleChildParent,
+    },
 };
 use {
+    fragile::Fragile,
     iui::{controls, UI},
     legion::prelude::*,
     std::sync::mpsc::channel,
+    widgets::{ComponentState, EventReceiver},
 };
-
-pub trait Component {
-    fn view(&self) -> Box<dyn BoxedPrimitiveWidget>;
-}
 
 pub struct App<C: Component + 'static> {
     ctx: UI,
@@ -49,7 +50,8 @@ impl<C: Component + 'static> App<C> {
             &ctx,
             root_component
                 .view()
-                .create_control(&ctx, &mut world, sender.clone()),
+                .create_control(&ctx, &mut world, sender.clone())
+                .1,
         );
         window.show(&ctx);
 
@@ -66,8 +68,18 @@ impl<C: Component + 'static> App<C> {
                         &ctx,
                         root_component
                             .view()
-                            .create_control(&ctx, &mut world, sender.clone()),
+                            .create_control(&ctx, &mut world, sender.clone())
+                            .1,
                     );
+                }
+
+                let dirty_components =
+                    <(Write<ComponentState>, Read<Fragile<EventReceiver>>)>::query();
+
+                for (mut state, event_receiver) in dirty_components.iter_mut(&mut world) {
+                    if let Ok(event) = event_receiver.get().try_recv() {
+                        event.handle(state.edit());
+                    }
                 }
             }
         });
