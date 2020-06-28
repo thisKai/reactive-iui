@@ -162,7 +162,7 @@ impl<SelfTy: 'static> ControlEventListener<Button, SelfTy> for controls::Button 
         event_sender: EventSender,
     ) {
         self.on_clicked(ctx, move |_| {
-            event_sender.send(Event::new(handler));
+            let _ = event_sender.send(Event::new(handler));
         });
     }
 }
@@ -280,7 +280,7 @@ impl VirtualControl for Button {
 
     type Event = Clicked;
 
-    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
+    fn create_entity(&self, ctx: &UI, world: &mut World, _event_sender: EventSender) -> Entity {
         let button = Fragile::new(controls::Button::new(ctx, &self.text));
 
         let entity = world.insert((), Some((self.clone(), button)))[0];
@@ -310,7 +310,7 @@ impl VirtualControl for Group {
 
     type Event = ();
 
-    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
+    fn create_entity(&self, ctx: &UI, world: &mut World, _event_sender: EventSender) -> Entity {
         let mut group = controls::Group::new(ctx, &self.title);
 
         group.set_margined(ctx, self.margined);
