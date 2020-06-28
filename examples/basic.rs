@@ -38,7 +38,7 @@ impl Component for Main {
             Button {
                 text: self.is_true.to_string(),
             }
-            .on_click(Self::on_clicked),
+            .on_clicked(Self::on_clicked),
         )
         .boxed()
     }
