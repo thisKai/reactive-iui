@@ -171,6 +171,14 @@ pub struct Button {
 impl Button {
     #[allow(non_upper_case_globals)]
     pub const Clicked: Clicked = Clicked;
+
+    pub fn on_click<SelfTy>(self, handler: fn(&mut SelfTy)) -> Handler<Self, SelfTy> {
+        Handler {
+            child: self,
+            event: Self::Clicked,
+            handler,
+        }
+    }
 }
 impl VirtualControl for Button {
     type Control = controls::Button;

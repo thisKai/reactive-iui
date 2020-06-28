@@ -34,13 +34,12 @@ impl Component for Main {
             title: String::from("Hello"),
             margined: true,
         }
-        .child(Handler {
-            child: Button {
+        .child(
+            Button {
                 text: self.is_true.to_string(),
-            },
-            event: Button::Clicked,
-            handler: Self::on_clicked,
-        })
+            }
+            .on_click(Self::on_clicked),
+        )
         .boxed()
     }
 }
