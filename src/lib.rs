@@ -3,7 +3,7 @@ use {
     fragile::Fragile,
     iui::{controls, UI},
     legion::prelude::*,
-    std::any::Any,
+    std::{any::Any, sync::mpsc::{channel, Sender}},
 };
 
 pub trait Component {
@@ -13,10 +13,10 @@ pub trait Component {
 pub struct App<C: Component + 'static> {
     ctx: UI,
     window: controls::Window,
-    component: C,
+    root_component: C,
 }
 impl<C: Component + 'static> App<C> {
-    pub fn new(component: C) -> Self {
+    pub fn new(root_component: C) -> Self {
         let ctx = UI::init().expect("Couldn't initialize UI library");
 
         let window =
@@ -25,7 +25,7 @@ impl<C: Component + 'static> App<C> {
         Self {
             ctx,
             window,
-            component,
+            root_component,
         }
     }
 
@@ -33,23 +33,39 @@ impl<C: Component + 'static> App<C> {
         let Self {
             ctx,
             mut window,
-            component,
+            mut root_component,
         } = self;
 
         let universe = Universe::new();
         let mut world = universe.create_world();
 
-        window.set_child(&ctx, component.view().create_control(&ctx, &mut world));
+        let (sender, receiver) = channel();
+
+        window.set_child(&ctx, root_component.view().create_control(&ctx, &mut world, sender.clone()));
         window.show(&ctx);
 
-        ctx.main();
+        let mut event_loop = ctx.event_loop();
+
+        event_loop.on_tick(&ctx, {
+            let ctx = ctx.clone();
+
+            move || {
+                if let Ok(event) = receiver.try_recv() {
+                    event.handle(&mut root_component);
+
+                    window.set_child(&ctx, root_component.view().create_control(&ctx, &mut world, sender.clone()));
+                }
+            }
+        });
+
+        event_loop.run(&ctx);
     }
 }
 
 pub trait VirtualControl: Any + PartialEq {
     type Control: Clone + Into<controls::Control>;
 
-    type Event;
+    type Event: Clone;
 
     fn boxed(self) -> Box<dyn BaseVirtualControl>
     where
@@ -58,18 +74,22 @@ pub trait VirtualControl: Any + PartialEq {
         Box::new(self)
     }
 
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity;
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity;
 
-    fn create_control<'a, 'b>(&'a self, ctx: &UI, world: &'b mut World) -> Self::Control {
-        let entity = self.create_entity(ctx, world);
-        world.get_component::<Fragile<Self::Control>>(entity).unwrap().get().clone()
+    fn create_control<'a, 'b>(&'a self, ctx: &UI, world: &'b mut World, event_sender: EventSender) -> Self::Control {
+        let entity = self.create_entity(ctx, world, event_sender);
+        world
+            .get_component::<Fragile<Self::Control>>(entity)
+            .unwrap()
+            .get()
+            .clone()
     }
 }
 pub trait BaseVirtualControl {
     fn as_any(&self) -> &dyn Any;
     fn eq(&self, other: &dyn BaseVirtualControl) -> bool;
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity;
-    fn create_control(&self, ctx: &UI, world: &mut World) -> controls::Control;
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity;
+    fn create_control(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> controls::Control;
 }
 impl<T: VirtualControl> BaseVirtualControl for T {
     fn as_any(&self) -> &dyn Any {
@@ -78,16 +98,72 @@ impl<T: VirtualControl> BaseVirtualControl for T {
     fn eq(&self, other: &dyn BaseVirtualControl) -> bool {
         other.as_any().downcast_ref() == Some(self)
     }
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity {
-        VirtualControl::create_entity(self, ctx, world)
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
+        VirtualControl::create_entity(self, ctx, world, event_sender)
     }
-    fn create_control(&self, ctx: &UI, world: &mut World) -> controls::Control {
-        VirtualControl::create_control(self, ctx, world).into()
+    fn create_control(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> controls::Control {
+        VirtualControl::create_control(self, ctx, world, event_sender).into()
     }
 }
 impl PartialEq for dyn BaseVirtualControl {
     fn eq(&self, other: &Self) -> bool {
         BaseVirtualControl::eq(self, other)
+    }
+}
+
+pub struct Event {
+    handler: Box<dyn HandleEvent + Send + Sync + 'static>,
+}
+impl Event {
+    fn new<SelfTy: 'static>(handler: fn(&mut SelfTy)) -> Self {
+        Self {
+            handler: Box::new(TypedEvent { handler }),
+        }
+    }
+    fn handle(&self, component: &mut dyn Any) {
+        self.handler.handle(component)
+    }
+}
+
+type EventSender = Sender<Event>;
+
+pub trait HandleEvent {
+    fn handle(&self, component: &mut dyn Any);
+}
+pub struct TypedEvent<SelfTy: 'static> {
+    pub handler: fn(&mut SelfTy),
+}
+impl<SelfTy: Any> TypedEvent<SelfTy> {
+    fn handle_typed(&self, component: &mut SelfTy) {
+        (self.handler)(component)
+    }
+}
+impl<SelfTy: Any> HandleEvent for TypedEvent<SelfTy> {
+    fn handle(&self, component: &mut dyn Any) {
+        self.handle_typed(component.downcast_mut().unwrap())
+    }
+}
+
+pub trait ControlEventListener<V: VirtualControl, SelfTy> {
+    fn on_event(
+        &mut self,
+        ctx: &UI,
+        event: V::Event,
+        handler: fn(&mut SelfTy),
+        event_sender: EventSender,
+    );
+}
+impl<SelfTy: 'static> ControlEventListener<Button, SelfTy> for controls::Button {
+    fn on_event(
+        &mut self,
+        ctx: &UI,
+        _event: Clicked,
+        handler: fn(&mut SelfTy),
+        event_sender: EventSender,
+    ) {
+        self.on_clicked(ctx, move |_| {
+            event_sender.send(Event::new(handler));
+        });
     }
 }
 
@@ -102,13 +178,28 @@ impl<V: VirtualControl, SelfTy> PartialEq for Handler<V, SelfTy> {
         self.child == other.child
     }
 }
-impl<V: VirtualControl, SelfTy: PartialEq + 'static> VirtualControl for Handler<V, SelfTy> {
+impl<V, SelfTy> VirtualControl for Handler<V, SelfTy>
+where
+    V: VirtualControl,
+    SelfTy: PartialEq + 'static,
+    V::Control: ControlEventListener<V, SelfTy>,
+{
     type Control = V::Control;
 
     type Event = V::Event;
 
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity {
-        self.child.create_entity(ctx, world)
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
+        let entity = self.child.create_entity(ctx, world, event_sender.clone());
+
+        let mut control = world
+            .get_component::<Fragile<Self::Control>>(entity)
+            .unwrap()
+            .get()
+            .clone();
+
+        control.on_event(&ctx, self.event.clone(), self.handler, event_sender);
+
+        entity
     }
 }
 
@@ -149,19 +240,23 @@ where
 
     type Event = P::Event;
 
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity {
-        let parent = self.parent.create_entity(ctx, world);
-        let child = self.child.create_entity(ctx, world);
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
+        let parent = self.parent.create_entity(ctx, world, event_sender.clone());
+        let child = self.child.create_entity(ctx, world, event_sender);
 
         let parent_control = world.get_component::<Fragile<P::Control>>(parent).unwrap();
         let child_control = world.get_component::<Fragile<C::Control>>(child).unwrap();
 
-        parent_control.get().clone().set_child(ctx, child_control.get().clone());
+        parent_control
+            .get()
+            .clone()
+            .set_child(ctx, child_control.get().clone());
 
         parent
     }
 }
 
+#[derive(Copy, Clone)]
 pub struct Clicked;
 
 #[derive(Clone, PartialEq)]
@@ -185,7 +280,7 @@ impl VirtualControl for Button {
 
     type Event = Clicked;
 
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity {
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
         let button = Fragile::new(controls::Button::new(ctx, &self.text));
 
         let entity = world.insert((), Some((self.clone(), button)))[0];
@@ -215,7 +310,7 @@ impl VirtualControl for Group {
 
     type Event = ();
 
-    fn create_entity(&self, ctx: &UI, world: &mut World) -> Entity {
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
         let mut group = controls::Group::new(ctx, &self.title);
 
         group.set_margined(ctx, self.margined);
