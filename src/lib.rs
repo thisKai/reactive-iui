@@ -2,7 +2,7 @@ pub mod widgets;
 
 pub use {
     codegen::view,
-    widgets::{BaseVirtualControl, VirtualControl, Button, Group, SingleChildParent},
+    widgets::{BoxedPrimitiveWidget, PrimitiveWidget, Button, Group, SingleChildParent},
 };
 use {
     iui::{controls, UI},
@@ -11,7 +11,7 @@ use {
 };
 
 pub trait Component {
-    fn view(&self) -> Box<dyn BaseVirtualControl>;
+    fn view(&self) -> Box<dyn BoxedPrimitiveWidget>;
 }
 
 pub struct App<C: Component + 'static> {

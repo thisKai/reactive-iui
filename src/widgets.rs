@@ -5,12 +5,12 @@ use {
     std::{any::Any, sync::mpsc::Sender},
 };
 
-pub trait VirtualControl: Any + PartialEq {
+pub trait PrimitiveWidget: Any + PartialEq {
     type Control: Clone + Into<controls::Control>;
 
     type Event: Clone;
 
-    fn boxed(self) -> Box<dyn BaseVirtualControl>
+    fn boxed(self) -> Box<dyn BoxedPrimitiveWidget>
     where
         Self: Sized,
     {
@@ -28,29 +28,29 @@ pub trait VirtualControl: Any + PartialEq {
             .clone()
     }
 }
-pub trait BaseVirtualControl {
+pub trait BoxedPrimitiveWidget {
     fn as_any(&self) -> &dyn Any;
-    fn eq(&self, other: &dyn BaseVirtualControl) -> bool;
+    fn eq(&self, other: &dyn BoxedPrimitiveWidget) -> bool;
     fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity;
     fn create_control(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> controls::Control;
 }
-impl<T: VirtualControl> BaseVirtualControl for T {
+impl<T: PrimitiveWidget> BoxedPrimitiveWidget for T {
     fn as_any(&self) -> &dyn Any {
         self
     }
-    fn eq(&self, other: &dyn BaseVirtualControl) -> bool {
+    fn eq(&self, other: &dyn BoxedPrimitiveWidget) -> bool {
         other.as_any().downcast_ref() == Some(self)
     }
     fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
-        VirtualControl::create_entity(self, ctx, world, event_sender)
+        PrimitiveWidget::create_entity(self, ctx, world, event_sender)
     }
     fn create_control(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> controls::Control {
-        VirtualControl::create_control(self, ctx, world, event_sender).into()
+        PrimitiveWidget::create_control(self, ctx, world, event_sender).into()
     }
 }
-impl PartialEq for dyn BaseVirtualControl {
+impl PartialEq for dyn BoxedPrimitiveWidget {
     fn eq(&self, other: &Self) -> bool {
-        BaseVirtualControl::eq(self, other)
+        BoxedPrimitiveWidget::eq(self, other)
     }
 }
 
@@ -87,7 +87,7 @@ impl<SelfTy: Any> HandleEvent for TypedEvent<SelfTy> {
     }
 }
 
-pub trait ControlEventListener<V: VirtualControl, SelfTy> {
+pub trait ControlEventListener<V: PrimitiveWidget, SelfTy> {
     fn on_event(
         &mut self,
         ctx: &UI,
@@ -111,19 +111,19 @@ impl<SelfTy: 'static> ControlEventListener<Button, SelfTy> for controls::Button 
 }
 
 #[derive(Clone)]
-pub struct Handler<V: VirtualControl, SelfTy> {
+pub struct Handler<V: PrimitiveWidget, SelfTy> {
     pub handler: fn(&mut SelfTy),
     pub event: V::Event,
     pub child: V,
 }
-impl<V: VirtualControl, SelfTy> PartialEq for Handler<V, SelfTy> {
+impl<V: PrimitiveWidget, SelfTy> PartialEq for Handler<V, SelfTy> {
     fn eq(&self, other: &Self) -> bool {
         self.child == other.child
     }
 }
-impl<V, SelfTy> VirtualControl for Handler<V, SelfTy>
+impl<V, SelfTy> PrimitiveWidget for Handler<V, SelfTy>
 where
-    V: VirtualControl,
+    V: PrimitiveWidget,
     SelfTy: PartialEq + 'static,
     V::Control: ControlEventListener<V, SelfTy>,
 {
@@ -146,7 +146,7 @@ where
     }
 }
 
-pub trait SingleChildParent: VirtualControl
+pub trait SingleChildParent: PrimitiveWidget
 where
     Self::Control: SingleChildParentControl,
 {
@@ -173,10 +173,10 @@ impl<P: PartialEq, C> PartialEq for ConnectSingleChild<P, C> {
         self.parent == other.parent
     }
 }
-impl<P, C> VirtualControl for ConnectSingleChild<P, C>
+impl<P, C> PrimitiveWidget for ConnectSingleChild<P, C>
 where
-    P: SingleChildParent + VirtualControl,
-    C: VirtualControl,
+    P: SingleChildParent + PrimitiveWidget,
+    C: PrimitiveWidget,
     P::Control: SingleChildParentControl,
 {
     type Control = P::Control;
@@ -218,7 +218,7 @@ impl Button {
         }
     }
 }
-impl VirtualControl for Button {
+impl PrimitiveWidget for Button {
     type Control = controls::Button;
 
     type Event = Clicked;
@@ -248,7 +248,7 @@ impl SingleChildParent for Group {
         }
     }
 }
-impl VirtualControl for Group {
+impl PrimitiveWidget for Group {
     type Control = controls::Group;
 
     type Event = ();

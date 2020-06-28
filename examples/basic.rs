@@ -29,7 +29,7 @@ impl Main {
     }
 }
 impl Component for Main {
-    fn view(&self) -> Box<dyn BaseVirtualControl> {
+    fn view(&self) -> Box<dyn BoxedPrimitiveWidget> {
         Group {
             title: String::from("Hello"),
             margined: true,
