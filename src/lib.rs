@@ -1,19 +1,20 @@
 use {
     iui::{controls, UI},
-    std::any::Any,
+    std::{any::Any, sync::mpsc::{channel, Sender}},
 };
 pub use codegen::view;
 
-pub struct App {
+pub trait Component {
+    fn view(&self) -> Box<dyn BaseVirtualControl>;
+}
+
+pub struct App<C: Component + 'static> {
     ctx: UI,
     window: controls::Window,
-    build: Box<dyn Fn() -> Box<dyn BaseVirtualControl>>,
+    component: C,
 }
-impl App {
-    pub fn new<V: VirtualControl, F>(build: F) -> Self
-    where
-        F: Fn() -> V + 'static,
-    {
+impl<C: Component + 'static> App<C> {
+    pub fn new(component: C) -> Self {
         let ctx = UI::init().expect("Couldn't initialize UI library");
 
         let window =
@@ -22,19 +23,24 @@ impl App {
         Self {
             ctx,
             window,
-            build: Box::new(move || Box::new(build())),
+            component,
         }
     }
 
-    pub fn run(&mut self) {
-        self.window.set_child(&self.ctx, (self.build)().control(&self.ctx));
-        self.window.show(&self.ctx);
-        self.ctx.main();
+    pub fn run(mut self) {
+        let Self { ctx, mut window, mut component } = self;
+
+        window.set_child(&ctx, component.view().control(&ctx));
+        window.show(&ctx);
+
+        ctx.main();
     }
 }
 
 pub trait VirtualControl: Any + PartialEq {
     type Control: Into<controls::Control>;
+
+    type Event;
 
     type UpdateCtx;
 
@@ -84,8 +90,9 @@ impl PartialEq for dyn BaseVirtualControl {
 }
 
 pub struct Handler<V: VirtualControl, SelfTy> {
-    handler: fn(&mut SelfTy),
-    child: V,
+    pub handler: fn(&mut SelfTy),
+    pub event: V::Event,
+    pub child: V,
 }
 impl<V: VirtualControl, SelfTy> PartialEq for Handler<V, SelfTy> {
     fn eq(&self, other: &Self) -> bool {
@@ -94,6 +101,8 @@ impl<V: VirtualControl, SelfTy> PartialEq for Handler<V, SelfTy> {
 }
 impl<V: VirtualControl, SelfTy: PartialEq + 'static> VirtualControl for Handler<V, SelfTy> {
     type Control = V::Control;
+
+    type Event = V::Event;
 
     type UpdateCtx = V::UpdateCtx;
 
@@ -114,12 +123,20 @@ impl<V: VirtualControl, SelfTy: PartialEq + 'static> VirtualControl for Handler<
     }
 }
 
+pub struct Clicked;
+
 #[derive(PartialEq)]
 pub struct Button {
     pub text: String,
 }
+impl Button {
+    #[allow(non_upper_case_globals)]
+    pub const Clicked: Clicked = Clicked;
+}
 impl VirtualControl for Button {
     type Control = controls::Button;
+
+    type Event = Clicked;
 
     type UpdateCtx = ();
 
@@ -150,6 +167,8 @@ pub struct Group {
 }
 impl VirtualControl for Group {
     type Control = controls::Group;
+
+    type Event = ();
 
     type UpdateCtx = GroupUpdateCtx;
 
