@@ -11,4 +11,6 @@ edition = "2018"
 
 [dependencies]
 codegen = { path = "codegen", package = "reactive-iui-codegen" }
-iui = "0.3.0"
+iui = "0.3"
+legion = "0.2"
+fragile = "1.0"

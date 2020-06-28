@@ -20,28 +20,31 @@ use reactive_iui::*;
 // }
 
 #[derive(PartialEq)]
-struct MainNoMacro {
+struct Main {
     is_true: bool,
 }
-impl MainNoMacro {
+impl Main {
     fn on_clicked(&mut self) {
         self.is_true = !self.is_true;
     }
 }
-impl Component for MainNoMacro {
+impl Component for Main {
     fn view(&self) -> Box<dyn BaseVirtualControl> {
         Group {
             title: String::from("Hello"),
             margined: true,
-            child: Some(Handler {
-                child: Button { text: self.is_true.to_string() },
-                event: Button::Clicked,
-                handler: Self::on_clicked,
-            }.boxed()),
-        }.boxed()
+        }
+        .child(Handler {
+            child: Button {
+                text: self.is_true.to_string(),
+            },
+            event: Button::Clicked,
+            handler: Self::on_clicked,
+        })
+        .boxed()
     }
 }
 
 fn main() {
-    App::new(MainNoMacro { is_true: false }).run();
+    App::new(Main { is_true: false }).run();
 }
