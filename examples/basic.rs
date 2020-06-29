@@ -20,27 +20,14 @@ use reactive_iui::*;
 // }
 
 #[derive(Clone, PartialEq)]
-struct Main {
-    is_true: bool,
-}
-impl Main {
-    fn on_clicked(&mut self) {
-        self.is_true = !self.is_true;
-    }
-}
+struct Main;
 impl Component for Main {
     fn view(&self) -> Box<dyn BoxedPrimitiveWidget> {
         Group {
             title: String::from("Hello"),
             margined: true,
         }
-        .child(
-            ComponentWidget(BooleanButton { value: self.is_true })
-            // Button {
-            //     text: self.is_true.to_string(),
-            // }
-            // .on_clicked(Self::on_clicked),
-        )
+        .child(ComponentWidget(BooleanButton { value: false }))
         .boxed()
     }
 }
@@ -51,7 +38,7 @@ struct BooleanButton {
 }
 impl BooleanButton {
     fn on_clicked(&mut self) {
-        println!("nested component event");
+        self.value = !self.value;
     }
 }
 impl Component for BooleanButton {
@@ -65,5 +52,5 @@ impl Component for BooleanButton {
 }
 
 fn main() {
-    App::new(Main { is_true: false }).run();
+    App::new(Main).run();
 }

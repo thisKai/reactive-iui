@@ -33,7 +33,10 @@ impl PrimitiveWidget for Group {
 }
 
 impl SingleChildParentControl for controls::Group {
-    fn set_child<C: Into<controls::Control>>(&mut self, ctx: &UI, child: C) {
+    fn set_child(&mut self, ctx: &UI, child: controls::Control) {
         controls::Group::set_child(self, ctx, child)
+    }
+    fn box_clone(&self) -> Box<dyn SingleChildParentControl> {
+        Box::new(Clone::clone(self))
     }
 }

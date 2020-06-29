@@ -42,5 +42,8 @@ impl ComponentState {
     pub fn edit(&mut self) -> &mut dyn Component {
         &mut **self.0.get_mut()
     }
+    pub fn view(&self) -> Box<dyn BoxedPrimitiveWidget> {
+        self.0.get().view()
+    }
 }
 pub struct Root(Entity);

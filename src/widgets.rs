@@ -174,8 +174,9 @@ where
     where
         Self: Sized;
 }
-pub trait SingleChildParentControl: Into<controls::Control> {
-    fn set_child<C: Into<controls::Control>>(&mut self, ctx: &UI, child: C);
+pub trait SingleChildParentControl {
+    fn set_child(&mut self, ctx: &UI, child: controls::Control);
+    fn box_clone(&self) -> Box<dyn SingleChildParentControl>;
 }
 
 #[derive(Clone)]
@@ -202,13 +203,20 @@ where
         let parent = self.parent.create_entity(ctx, world, event_sender.clone());
         let child = self.child.create_entity(ctx, world, event_sender);
 
-        let parent_control = world.get_component::<Fragile<P::Control>>(parent).unwrap();
-        let child_control = world.get_component::<Fragile<C::Control>>(child).unwrap();
+        let parent_control = {
+            let parent_control = world.get_component::<Fragile<P::Control>>(parent).unwrap();
+            let child_control = world.get_component::<Fragile<C::Control>>(child).unwrap();
 
-        parent_control
-            .get()
-            .clone()
-            .set_child(ctx, child_control.get().clone());
+            parent_control
+                .get()
+                .clone()
+                .set_child(ctx, child_control.get().clone().into());
+
+            parent_control.get().clone()
+        };
+
+        let child_parent: Box<dyn SingleChildParentControl> = Box::new(parent_control);
+        let _ = world.add_component(child, Fragile::new(child_parent));
 
         parent
     }

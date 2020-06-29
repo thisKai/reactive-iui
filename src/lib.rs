@@ -4,7 +4,7 @@ pub use {
     codegen::view,
     widgets::{
         BoxedPrimitiveWidget, Button, Component, ComponentWidget, Group, PrimitiveWidget,
-        SingleChildParent,
+        SingleChildParent, SingleChildParentControl,
     },
 };
 use {
@@ -12,7 +12,7 @@ use {
     iui::{controls, UI},
     legion::prelude::*,
     std::sync::mpsc::channel,
-    widgets::{ComponentState, EventReceiver},
+    widgets::{ComponentState, EventReceiver, EventSender},
 };
 
 pub struct App<C: Component + 'static> {
@@ -73,13 +73,37 @@ impl<C: Component + 'static> App<C> {
                     );
                 }
 
-                let dirty_components =
-                    <(Write<ComponentState>, Read<Fragile<EventReceiver>>)>::query();
+                let components = <(
+                    Write<ComponentState>,
+                    Read<Fragile<EventSender>>,
+                    Read<Fragile<EventReceiver>>,
+                    Write<Fragile<controls::Control>>,
+                    Write<Fragile<Box<dyn SingleChildParentControl>>>,
+                )>::query();
 
-                for (mut state, event_receiver) in dirty_components.iter_mut(&mut world) {
+                let mut updates = vec![];
+
+                for (entity, (mut state, event_sender, event_receiver, control, parent_control)) in
+                    components.iter_entities_mut(&mut world)
+                {
                     if let Ok(event) = event_receiver.get().try_recv() {
                         event.handle(state.edit());
+                        updates.push((
+                            entity,
+                            state.view(),
+                            event_sender.get().clone(),
+                            control.get().clone(),
+                            parent_control.get().box_clone(),
+                        ));
                     }
+                }
+
+                for (entity, view, event_sender, control, mut parent_control) in updates {
+                    let (new_entity, new_control) =
+                        view.create_control(&ctx, &mut world, event_sender);
+                    parent_control.set_child(&ctx, new_control.clone());
+                    unsafe { control.destroy() }
+                    let _ = world.add_component(entity, Fragile::new(new_control));
                 }
             }
         });
@@ -87,3 +111,5 @@ impl<C: Component + 'static> App<C> {
         event_loop.run(&ctx);
     }
 }
+
+struct NeedsUpdate;
