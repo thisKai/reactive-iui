@@ -27,7 +27,11 @@ impl Component for Main {
             title: String::from("Hello"),
             margined: true,
         }
-        .child(ComponentWidget(BooleanButton { value: false }))
+        .child(
+            HorizontalBox { padded: true }
+                .child(ComponentWidget(BooleanButton { value: false }))
+                .child(ComponentWidget(BooleanButton { value: false })),
+        )
         .boxed()
     }
 }

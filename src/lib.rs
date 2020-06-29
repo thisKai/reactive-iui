@@ -3,8 +3,8 @@ pub mod widgets;
 pub use {
     codegen::view,
     widgets::{
-        BoxedPrimitiveWidget, Button, Component, ComponentWidget, Group, PrimitiveWidget,
-        SingleChildParent, SingleChildParentControl,
+        BoxedPrimitiveWidget, Button, Component, ComponentWidget, Group, HorizontalBox,
+        PrimitiveWidget, SingleChildParent, SingleChildParentControl, Parent,
     },
 };
 use {

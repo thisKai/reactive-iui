@@ -1,10 +1,12 @@
 mod button;
 mod component;
 mod group;
+mod horizontal_box;
 
 use {
     as_any::Downcast,
     fragile::Fragile,
+    frunk::{hlist, hlist::HList, Hlist},
     iui::{controls, UI},
     legion::prelude::*,
     std::{
@@ -16,6 +18,7 @@ pub use {
     button::Button,
     component::{Component, ComponentState, ComponentWidget},
     group::Group,
+    horizontal_box::HorizontalBox,
 };
 
 pub trait PrimitiveWidget: Any + PartialEq {
@@ -219,5 +222,105 @@ where
         let _ = world.add_component(child, Fragile::new(child_parent));
 
         parent
+    }
+}
+
+pub trait Parent<W: PrimitiveWidget>: PrimitiveWidget
+where
+    Self::Control: ParentControl,
+{
+    type List: HList;
+
+    fn child<C>(self, child: C) -> ConnectChildren<W, Hlist!(C, ...Self::List)>
+    where
+        Self: Sized;
+}
+
+pub trait ParentControl {
+    fn append_child(&mut self, ctx: &UI, child: controls::Control);
+    fn box_clone(&self) -> Box<dyn ParentControl>;
+}
+
+#[derive(Clone, PartialEq)]
+pub struct ConnectChildren<P, L> {
+    parent: P,
+    children: L,
+}
+
+impl<P, L> Parent<P> for ConnectChildren<P, L>
+where
+    P: PrimitiveWidget,
+    L: WidgetList + Clone + PartialEq + 'static,
+    P::Control: ParentControl,
+{
+    type List = L;
+
+    fn child<C>(self, child: C) -> ConnectChildren<P, Hlist!(C, ...L)>
+    where
+        Self: Sized,
+    {
+        ConnectChildren {
+            parent: self.parent,
+            children: self.children.prepend(child),
+        }
+    }
+}
+
+impl<P, L> PrimitiveWidget for ConnectChildren<P, L>
+where
+    P: PrimitiveWidget,
+    L: WidgetList + Clone + PartialEq + 'static,
+    P::Control: ParentControl,
+{
+    type Control = P::Control;
+
+    type Event = P::Event;
+
+    fn create_entity(&self, ctx: &UI, world: &mut World, event_sender: EventSender) -> Entity {
+        let parent = self.parent.create_entity(ctx, world, event_sender.clone());
+
+        let (children, child_controls): (Vec<_>, Vec<_>) = self
+            .children
+            .clone()
+            .vec()
+            .iter()
+            .map(|widget| widget.create_control(ctx, world, event_sender.clone()))
+            .unzip();
+
+        let parent_control = {
+            let mut parent_control = world
+                .get_component_mut::<Fragile<P::Control>>(parent)
+                .unwrap();
+            let parent_control = parent_control.get_mut();
+
+            for child_control in child_controls {
+                parent_control.append_child(ctx, child_control);
+            }
+
+            parent_control.clone()
+        };
+
+        for child in children {
+            let child_parent: Box<dyn ParentControl> = Box::new(parent_control.clone());
+            let _ = world.add_component(child, Fragile::new(child_parent));
+        }
+
+        parent
+    }
+}
+
+pub trait WidgetList: frunk::hlist::HList {
+    fn vec(self) -> Vec<Box<dyn BoxedPrimitiveWidget>>;
+}
+impl WidgetList for frunk::hlist::HNil {
+    fn vec(self) -> Vec<Box<dyn BoxedPrimitiveWidget>> {
+        vec![]
+    }
+}
+impl<H: PrimitiveWidget, T: WidgetList> WidgetList for frunk::hlist::HCons<H, T> {
+    fn vec(self) -> Vec<Box<dyn BoxedPrimitiveWidget>> {
+        let mut list = self.tail.vec();
+        list.push(self.head.boxed());
+        list
     }
 }
